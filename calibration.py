@@ -37,26 +37,14 @@ def point_finder(grid_points=grid_points, image_folder=img_folder):
             # cv2.imshow('img', img)
             # cv2.waitKey(500)
 
-    return obj_pts, img_pts
+    return obj_pts, img_pts, gray.shape[::-1]
 
 
-def find_cal_matrix(obj_pts, img_pts, img_size):
+def find_cal_matrix():
+    obj_pts, img_pts, img_size = point_finder()
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(obj_pts, img_pts, img_size, None, None)
     return mtx, dist
 
 
 def undistort_img(image, mtx, dist):
     return cv2.undistort(image, mtx, dist, None, mtx)
-
-
-def main():
-    obj_pts, img_pts = point_finder()
-    image = cv2.imread('camera_cal/calibration4.jpg')
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    mtx, dist = find_cal_matrix(obj_pts, img_pts, image.shape[::-1])
-    undist = undistort_img(image, mtx, dist)
-    plt.imshow(undist)
-    plt.show()
-
-if __name__ == "__main__":
-    main()
