@@ -1,14 +1,19 @@
 from calibration import *
 from warp import *
+from threshold import *
 
 
 def main():
     image = cv2.imread('test_images/test3.jpg')
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     mtx, dist = find_cal_matrix()
     undist = undistort_img(image, mtx, dist)
+    thresh = combine_thresholds(undist, k_size_sobel=7, thresh_sobel=(30, 160),
+                                 k_size_mag=13, thresh_mag=(50, 120),
+                                 k_size_dir=7, thresh_dir=(50, 120))
     plt.figure(1)
-    plt.imshow(undist)
-    transformed_img = warp_perspective(undist)
+    plt.imshow(thresh)
+    transformed_img = warp_perspective(thresh)
     plt.figure(2)
     plt.imshow(transformed_img)
     plt.show()
