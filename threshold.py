@@ -57,6 +57,14 @@ def mag_threshold(img, sobel_kernel=3, thresh=(0, 255)):
     return sbinary
 
 
+def color_threshold(img, space=cv2.COLOR_RGB2HLS, channel=2, thresh=(0, 255)):
+    transform_img = cv2.cvtColor(img, space)
+    single_channel = transform_img[:, :, channel]
+    mask = np.zeros_like(single_channel)
+    mask[(single_channel >= thresh[0]) & (single_channel <= thresh[1])] = 1
+    return mask
+
+
 def combine_thresholds(img, k_size_sobel=3, thresh_sobel=(0, 255), k_size_dir=3, thresh_dir=(0, np.pi/2), k_size_mag=3, thresh_mag=(0, 255)):
     sobel_x = sobel_abs_threshold(img, direction='x', sobel_kernel=k_size_sobel, thresh=thresh_sobel)
     sobel_y = sobel_abs_threshold(img, direction='y', sobel_kernel=k_size_sobel, thresh=thresh_sobel)
@@ -66,3 +74,10 @@ def combine_thresholds(img, k_size_sobel=3, thresh_sobel=(0, 255), k_size_dir=3,
     combine = np.zeros_like(mag_mask)
     combine[((sobel_x == 1) & (sobel_y == 1)) | ((mag_mask == 1) & (dir_mask == 1))] = 1
     return combine
+
+
+def combine_color_grad_thresholds(img, grad_thres, space=cv2.COLOR_RGB2HLS, channel=2, thresh=(0, 255)):
+    color_thresh = color_threshold(img, space=space, channel=channel, thresh=thresh)
+    mask = np.zeros_like(color_thresh)
+    mask[(grad_thres == 1) | (color_thresh == 1)] = 1
+    return mask
