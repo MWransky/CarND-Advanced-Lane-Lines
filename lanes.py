@@ -3,6 +3,121 @@ import matplotlib.pyplot as plt
 import cv2
 
 
+def find_histogram_peaks(warped):
+    histogram = np.sum(warped[warped.shape[0]/2:, :], axis=0)
+    # Find the peak of the left and right
+    midpoint = np.int(histogram.shape[0]/2)
+    left_peak = np.argmax(histogram[:midpoint])
+    right_peak = np.argmax(histogram[midpoint:]) + midpoint
+
+    return left_peak, right_peak
+
+
+def find_line_pts_blind(warped, left_peak, right_peak):
+    # Number of sliding windows
+    nwindows = 4
+    # Set height of windows
+    window_height = np.int(warped.shape[0]/nwindows)
+    # Identify the x and y positions of all nonzero pixels in the image
+    nonzero = warped.nonzero()
+    nonzeroy = np.array(nonzero[0])
+    nonzerox = np.array(nonzero[1])
+    # Current positions to be updated for each window
+    leftx_current = left_peak
+    rightx_current = right_peak
+    # Set the width of the windows +/- margin
+    margin = 100
+    # Set minimum number of pixels found to recenter window
+    minpix = 50
+    # Create empty lists to receive left and right lane pixel indices
+    left_lane_inds = []
+    right_lane_inds = []
+
+    # Step through the windows one by one
+    for window in range(nwindows):
+        # Identify window boundaries in x and y (and right and left)
+        win_y_low = warped.shape[0] - (window+1)*window_height
+        win_y_high = warped.shape[0] - window*window_height
+        win_xleft_low = leftx_current - margin
+        win_xleft_high = leftx_current + margin
+        win_xright_low = rightx_current - margin
+        win_xright_high = rightx_current + margin
+        # Identify the nonzero pixels in x and y within the window
+        good_left_inds = ((nonzeroy >= win_y_low) & (nonzeroy < win_y_high) & (nonzerox >= win_xleft_low) & (nonzerox < win_xleft_high)).nonzero()[0]
+        good_right_inds = ((nonzeroy >= win_y_low) & (nonzeroy < win_y_high) & (nonzerox >= win_xright_low) & (nonzerox < win_xright_high)).nonzero()[0]
+        # Append these indices to the lists
+        left_lane_inds.append(good_left_inds)
+        right_lane_inds.append(good_right_inds)
+        # If you found > minpix pixels, recenter next window on their mean position
+        if len(good_left_inds) > minpix:
+            leftx_current = np.int(np.mean(nonzerox[good_left_inds]))
+        if len(good_right_inds) > minpix:
+            rightx_current = np.int(np.mean(nonzerox[good_right_inds]))
+
+    # Concatenate the arrays of indices
+    left_lane_inds = np.concatenate(left_lane_inds)
+    right_lane_inds = np.concatenate(right_lane_inds)
+
+    # Extract left and right line pixel positions
+    leftx = nonzerox[left_lane_inds]
+    lefty = nonzeroy[left_lane_inds]
+    rightx = nonzerox[right_lane_inds]
+    righty = nonzeroy[right_lane_inds]
+
+    # Fit a second order polynomial to each
+    left_fit = np.polyfit(lefty, leftx, 2)
+    right_fit = np.polyfit(righty, rightx, 2)
+
+    left_fit_meters = fit_quad_to_meters(lefty, leftx)
+    right_fit_meters = fit_quad_to_meters(righty, rightx)
+
+    return left_fit, right_fit, left_fit_meters, right_fit_meters, left_lane_inds, right_lane_inds
+
+
+def follow_line_pts(warped, left_fit, right_fit):
+    nonzero = warped.nonzero()
+    nonzeroy = np.array(nonzero[0])
+    nonzerox = np.array(nonzero[1])
+    margin = 100
+    left_lane_inds = ((nonzerox > (left_fit[0]*(nonzeroy**2) + left_fit[1]*nonzeroy + left_fit[2] - margin)) & (nonzerox < (left_fit[0]*(nonzeroy**2) + left_fit[1]*nonzeroy + left_fit[2] + margin))) 
+    right_lane_inds = ((nonzerox > (right_fit[0]*(nonzeroy**2) + right_fit[1]*nonzeroy + right_fit[2] - margin)) & (nonzerox < (right_fit[0]*(nonzeroy**2) + right_fit[1]*nonzeroy + right_fit[2] + margin)))  
+
+    # Extract left and right line pixel positions
+    leftx = nonzerox[left_lane_inds]
+    lefty = nonzeroy[left_lane_inds]
+    rightx = nonzerox[right_lane_inds]
+    righty = nonzeroy[right_lane_inds]
+
+    left_fit = np.polyfit(lefty, leftx, 2)
+    right_fit = np.polyfit(righty, rightx, 2)
+
+    left_fit_meters = fit_quad_to_meters(lefty, leftx)
+    right_fit_meters = fit_quad_to_meters(righty, rightx)
+
+    return left_fit, right_fit, left_fit_meters, right_fit_meters, left_lane_inds, right_lane_inds
+
+
+def visualize_lanes(warped, left_fit, right_fit, left_lane_inds, right_lane_inds):
+    ploty = np.linspace(0, warped.shape[0]-1, warped.shape[0])
+    left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+    right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+    out_img = np.dstack((warped, warped, warped))*255
+
+    nonzero = warped.nonzero()
+    nonzeroy = np.array(nonzero[0])
+    nonzerox = np.array(nonzero[1])
+
+    out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
+    out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
+    plt.imshow(out_img)
+    plt.plot(left_fitx, ploty, color='yellow')
+    plt.plot(right_fitx, ploty, color='yellow')
+    plt.xlim(0, 1280)
+    plt.ylim(720, 0)
+    plt.show()
+    return
+
+
 def find_window_centroids(image, window_width, window_height, margin):
 
     window_centroids = []
@@ -13,7 +128,6 @@ def find_window_centroids(image, window_width, window_height, margin):
 
     l_center = np.argmax(np.convolve(window, np.sum(image[int(image.shape[0]*.75):, 0:int(image.shape[1]/2)], axis=0)))-window_width/2
     r_center = np.argmax(np.convolve(window, np.sum(image[int(image.shape[0]*.75):, int(image.shape[1]/2):], axis=0)))-window_width/2+int(image.shape[1]/2)
-    print(r_center)
     # add what we found for the first layer
     window_centroids.append((l_center, r_center))
 
@@ -28,12 +142,17 @@ def find_window_centroids(image, window_width, window_height, margin):
         # find the best left centroid by using past left center as a reference
         l_lower = int(max(l_center+window_width/2-margin, 0))
         l_upper = int(min(l_center+window_width/2+margin, img_w))
-        l_center = np.argmax(slice_conv[l_lower:l_upper])+max(l_center-margin, 0)
+        if np.argmax(slice_conv[l_lower:l_upper]) == 0:
+            l_center = max(l_center-margin/4, 0)
+        else:
+            l_center = np.argmax(slice_conv[l_lower:l_upper])+max(l_center-margin, 0)
         # find the best right centroid by using past right center as a reference
         r_lower = int(max(r_center+window_width/2-margin, 0))
         r_upper = int(min(r_center+window_width/2+margin, img_w))
-        print(np.argmax(slice_conv[r_lower:r_upper]))
-        r_center = np.argmax(slice_conv[r_lower:r_upper])+max(r_center-margin, 0)
+        if np.argmax(slice_conv[r_lower:r_upper]) == 0:
+            r_center = max(r_center-margin/4, 0)
+        else:
+            r_center = np.argmax(slice_conv[r_lower:r_upper])+max(r_center-margin, 0)
         # add what we found for that slice
         window_centroids.append((l_center, r_center))
 
@@ -41,12 +160,14 @@ def find_window_centroids(image, window_width, window_height, margin):
 
 
 def fit_quad_to_meters(yvals, xvals):
+    yvals = [float(yval) for yval in yvals]
+    xvals = [float(xval) for xval in xvals]
     # conversion factor for meters per pixel in y dimension
     ym_per_pix = 30/720
     # conversion factor for meters per pixel in x dimension
     xm_per_pix = 3.7/700
     # convert points
-    yvals *= ym_per_pix
+    yvals = [val*ym_per_pix for val in yvals]
     xvals = [val*xm_per_pix for val in xvals]
     return np.polyfit(yvals, xvals, 2)
 
@@ -91,11 +212,24 @@ def fit_lane_boundaries(ymax, res_yvals, leftx, rightx):
     return left_lane, right_lane
 
 
-def draw_lanes_on_warped(warped_img, left_lane, right_lane):
-    output = np.array(cv2.merge((warped_img, warped_img, warped_img)), np.uint8)
-    cv2.polylines(output, [left_lane], isClosed=False, color=[255, 0, 0], thickness=3)
-    cv2.polylines(output, [right_lane], isClosed=False, color=[0, 0, 255], thickness=3)
-    return output
+def draw_lanes_on_original(warped, undist, left_fit, right_fit, Minv):
+    warp_zero = np.zeros_like(warped).astype(np.uint8)
+    color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
+
+    ploty = np.linspace(0, warped.shape[0]-1, warped.shape[0])
+    left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+    right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+
+    pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
+    pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
+    pts = np.hstack((pts_left, pts_right))
+
+    cv2.fillPoly(color_warp, np.int_([pts]), (0, 255, 0))
+
+    newwarp = cv2.warpPerspective(color_warp, Minv, (undist.shape[1], undist.shape[0]))
+    # Combine the result with the original image
+    result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
+    return result
 
 
 def find_curvature(ymax, polyfit):
@@ -103,12 +237,14 @@ def find_curvature(ymax, polyfit):
     return ((1 + (2*polyfit[0]*ymax*ym_per_pix + polyfit[1])**2)**1.5) / np.absolute(2*polyfit[0])
 
 
-def process_image_for_lanes(image, window_width, window_height, margin):
-    ymax = image.shape[0]
-    res_yvals, leftx, rightx = process_window_centers(image, window_width, window_height, margin)
-    left_lane, right_lane = fit_lane_boundaries(ymax, res_yvals, leftx, rightx)
-    left_curve = find_curvature(ymax, fit_quad_to_meters(res_yvals, leftx))
-    right_curve = find_curvature(ymax, fit_quad_to_meters(res_yvals, rightx))
-    print(left_curve, right_curve)
-    return draw_lanes_on_warped(image, left_lane, right_lane)
+def process_image_for_lanes(warped, undist, Minv):
+    left_peak, right_peak = find_histogram_peaks(warped)
+    left_fit, right_fit, left_fit_m, right_fit_m, l_indx, r_indx = find_line_pts_blind(warped, left_peak, right_peak)
+    # visualize_lanes(warped, left_fit, right_fit, l_indx, r_indx)
 
+    ymax = warped.shape[0]
+    left_curve = find_curvature(ymax, left_fit_m)
+    right_curve = find_curvature(ymax, right_fit_m)
+    print(left_curve, right_curve)
+    output = draw_lanes_on_original(warped, undist, left_fit, right_fit, Minv)
+    return output
