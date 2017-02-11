@@ -1,3 +1,6 @@
+import numpy as np
+
+
 class Line():
     def __init__(self):
         # was the line detected in the last iteration?
@@ -10,6 +13,7 @@ class Line():
         self.best_fit = None
         # polynomial coefficients for the most recent fit
         self.current_fit = [np.array([False])]
+        self.current_fit_m = [np.array([False])]
         # radius of curvature of the line in some units
         self.radius_of_curvature = None
         # distance in meters of vehicle center from the line
@@ -20,3 +24,5 @@ class Line():
         self.allx = None
         # y values for detected line pixels
         self.ally = None
+        # image indices for detected line pixels
+        self.indx = None
