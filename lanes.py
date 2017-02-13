@@ -13,9 +13,9 @@ def find_histogram_peaks(warped, side):
         return np.argmax(histogram[midpoint:]) + midpoint
 
 
-def find_line_pts_blind(warped, peak):
+def find_line_pts_blind(warped, peak, line):
     # Number of sliding windows
-    nwindows = 9
+    nwindows = 13
     # Set height of windows
     window_height = np.int(warped.shape[0]/nwindows)
     # Identify the x and y positions of all nonzero pixels in the image
@@ -53,15 +53,23 @@ def find_line_pts_blind(warped, peak):
     x = nonzerox[lane_inds]
     y = nonzeroy[lane_inds]
 
+    if len(x) == 0:
+        line.detected = False
+        lane_inds = line.indx
+        x = line.allx
+        y = line.ally
+    else:
+        line.detected = True
+
     # Fit a second order polynomial to each
     fit = np.polyfit(y, x, 2)
 
     fit_meters = fit_quad_to_meters(y, x)
 
-    return fit, fit_meters, lane_inds, x, y
+    return fit, fit_meters, lane_inds, x, y, line
 
 
-def find_line_pts(warped, fit):
+def find_line_pts(warped, fit, line):
     nonzero = warped.nonzero()
     nonzeroy = np.array(nonzero[0])
     nonzerox = np.array(nonzero[1])
@@ -71,12 +79,17 @@ def find_line_pts(warped, fit):
     # Extract left and right line pixel positions
     x = nonzerox[lane_inds]
     y = nonzeroy[lane_inds]
+    if len(x) == 0:
+        line.detected = False
+        lane_inds = line.indx
+        x = line.allx
+        y = line.ally
 
     fit = np.polyfit(y, x, 2)
 
     fit_meters = fit_quad_to_meters(y, x)
 
-    return fit, fit_meters, lane_inds, x, y
+    return fit, fit_meters, lane_inds, x, y, line
 
 
 def visualize_lanes(warped, left_fit, right_fit, left_lane_inds, right_lane_inds):
@@ -194,7 +207,10 @@ def fit_lane_boundaries(ymax, res_yvals, leftx, rightx):
     return left_lane, right_lane
 
 
-def draw_lanes_on_original(warped, undist, left_fit, right_fit, Minv):
+def draw_lanes_on_original(warped, undist, leftLine, rightLine, Minv):
+    left_fit = leftLine.best_fit
+    right_fit = rightLine.best_fit
+
     warp_zero = np.zeros_like(warped).astype(np.uint8)
     color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
 
@@ -211,6 +227,15 @@ def draw_lanes_on_original(warped, undist, left_fit, right_fit, Minv):
     newwarp = cv2.warpPerspective(color_warp, Minv, (undist.shape[1], undist.shape[0]))
     # Combine the result with the original image
     result = cv2.addWeighted(undist, 1, newwarp, 0.3, 0)
+
+    # Add text to dispaly lane curvatures
+    curve = (leftLine.radius_of_curvature + rightLine.radius_of_curvature)/float(2)
+    ymax = warped.shape[0]
+    img_center = warped.shape[1]/float(2)
+    off_center = find_center(ymax, img_center, left_fit, right_fit)
+    text = 'Average curvature: {0} m; Off-center by {1} m'. format(round(curve), round(off_center, 2))
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    result = cv2.putText(result, text, (100, 50), font, 1, (0, 0, 0), 2, cv2.LINE_AA)
     return result
 
 
@@ -219,36 +244,49 @@ def find_curvature(ymax, polyfit):
     return ((1 + (2*polyfit[0]*ymax*ym_per_pix + polyfit[1])**2)**1.5) / np.absolute(2*polyfit[0])
 
 
+def find_center(ymax, img_center, left_fit, right_fit):
+    xm_per_pix = 3.7/700
+    img_center *= xm_per_pix
+    left_pt = left_fit[0]*ymax**2 + left_fit[1]*ymax + left_fit[2]
+    right_pt = right_fit[0]*ymax**2 + right_fit[1]*ymax + right_fit[2]
+
+    lane_cntr = (left_pt*xm_per_pix + right_pt*xm_per_pix)/float(2)
+    return abs(img_center - lane_cntr)
+
+
+def process_line(warped, line, side):
+    ymax = warped.shape[0]
+
+    if not line.detected:
+        # Lane line is not detected, find it
+        # Next proceed with line finding algorithm
+        peak = find_histogram_peaks(warped, side)
+        fit, fit_m, indx, x, y, line = find_line_pts_blind(warped, peak, line)
+        curve = find_curvature(ymax, fit_m)
+        if line.should_update_blind(curve, fit):
+            line.update(fit, indx, x, y)
+            line.detected = True
+    else:
+        # Lane line detected in last frame, use as reference
+        prev_fit = line.best_fit
+        fit, fit_m, indx, x, y, line = find_line_pts(warped, prev_fit, line)
+        curve = find_curvature(ymax, fit_m)
+        if line.should_update(curve, fit):
+            line.update(fit, indx, x, y)
+        else:
+            line.detected = False
+            # if line.grace_amount >= 5:
+            #     # unable to find lane line 5 frames in a row, start fresh
+            #     line.grace_amount = 0
+            #     line.detected = False
+
+    return line
+
+
 def process_image_for_lanes(warped, undist, Minv, leftLine, rightLine):
-    if not leftLine.detected:
-        # Lane line is not detected, find it
-        left_peak = find_histogram_peaks(warped, 'left')
-        left_fit, left_fit_m, l_indx, l_x, l_y = find_line_pts_blind(warped, left_peak)
-        leftLine.detected = True
-        leftLine.current_fit = left_fit
-    else:
-        # Lane line detected in last frame, use as reference
-        prev_fit = leftLine.current_fit
-        left_fit, left_fit_m, l_indx, l_x, l_y = find_line_pts(warped, prev_fit)
-        leftLine.current_fit = left_fit
-
-    if not rightLine.detected:
-        # Lane line is not detected, find it
-        right_peak = find_histogram_peaks(warped, 'right')
-        right_fit, right_fit_m, r_indx, r_x, r_y = find_line_pts_blind(warped, right_peak)
-        rightLine.detected = True
-        rightLine.current_fit = right_fit
-    else:
-        # Lane line detected in last frame, use as reference
-        prev_fit = rightLine.current_fit
-        right_fit, right_fit_m, r_indx, r_x, r_y = find_line_pts(warped, prev_fit)
-        rightLine.current_fit = right_fit
-
+    leftLine = process_line(warped, leftLine, 'left')
+    rightLine = process_line(warped, rightLine, 'right')
     # visualize_lanes(warped, left_fit, right_fit, l_indx, r_indx)
 
-    ymax = warped.shape[0]
-    left_curve = find_curvature(ymax, left_fit_m)
-    right_curve = find_curvature(ymax, right_fit_m)
-    # print(left_curve, right_curve)
-    output = draw_lanes_on_original(warped, undist, left_fit, right_fit, Minv)
+    output = draw_lanes_on_original(warped, undist, leftLine, rightLine, Minv)
     return output, leftLine, rightLine
