@@ -209,7 +209,9 @@ def fit_lane_boundaries(ymax, res_yvals, leftx, rightx):
 
 def draw_lanes_on_original(warped, undist, leftLine, rightLine, Minv):
     left_fit = leftLine.best_fit
+    left_fit_m = leftLine.best_fit_m
     right_fit = rightLine.best_fit
+    right_fit_m = rightLine.best_fit_m
 
     warp_zero = np.zeros_like(warped).astype(np.uint8)
     color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
@@ -232,7 +234,7 @@ def draw_lanes_on_original(warped, undist, leftLine, rightLine, Minv):
     curve = (leftLine.radius_of_curvature + rightLine.radius_of_curvature)/float(2)
     ymax = warped.shape[0]
     img_center = warped.shape[1]/float(2)
-    off_center = find_center(ymax, img_center, left_fit, right_fit)
+    off_center = find_center(ymax, img_center, left_fit_m, right_fit_m)
     text = 'Average curvature: {0} m; Off-center by {1} m'. format(round(curve), round(off_center, 2))
     font = cv2.FONT_HERSHEY_SIMPLEX
     result = cv2.putText(result, text, (100, 50), font, 1, (0, 0, 0), 2, cv2.LINE_AA)
@@ -246,6 +248,8 @@ def find_curvature(ymax, polyfit):
 
 def find_center(ymax, img_center, left_fit, right_fit):
     xm_per_pix = 3.7/700
+    ym_per_pix = 30/270
+    ymax *= ym_per_pix
     img_center *= xm_per_pix
     left_pt = left_fit[0]*ymax**2 + left_fit[1]*ymax + left_fit[2]
     right_pt = right_fit[0]*ymax**2 + right_fit[1]*ymax + right_fit[2]
@@ -264,7 +268,7 @@ def process_line(warped, line, side):
         fit, fit_m, indx, x, y, line = find_line_pts_blind(warped, peak, line)
         curve = find_curvature(ymax, fit_m)
         if line.should_update_blind(curve, fit):
-            line.update(fit, indx, x, y)
+            line.update(fit, fit_m, indx, x, y)
             line.detected = True
     else:
         # Lane line detected in last frame, use as reference
@@ -272,9 +276,15 @@ def process_line(warped, line, side):
         fit, fit_m, indx, x, y, line = find_line_pts(warped, prev_fit, line)
         curve = find_curvature(ymax, fit_m)
         if line.should_update(curve, fit):
-            line.update(fit, indx, x, y)
+            line.update(fit, fit_m, indx, x, y)
         else:
             line.detected = False
+            peak = find_histogram_peaks(warped, side)
+            fit, fit_m, indx, x, y, line = find_line_pts_blind(warped, peak, line)
+            curve = find_curvature(ymax, fit_m)
+            if line.should_update_blind(curve, fit):
+                line.update(fit, fit_m, indx, x, y)
+                line.detected = True
             # if line.grace_amount >= 5:
             #     # unable to find lane line 5 frames in a row, start fresh
             #     line.grace_amount = 0

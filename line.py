@@ -9,10 +9,15 @@ class Line():
         self.grace_amount = 0
         # coefficient values of the last n fits of the line
         self.recent_fitted = []
+        # coef values of the last n lines scaled to meters
+        self.recent_fitted_m = []
         # polynomial coefficients averaged over the last n iterations
         self.best_fit = []
+        # polynomial coef averaged over last n iterations scaled to meters
+        self.best_fit_m = []
         # polynomial coefficients for the most recent fit
         self.current_fit = [np.array([False])]
+        # polynomial coef for the most recent fit scaled to meters
         # radius of curvature of the line in some units
         self.radius_of_curvature = 0
         # distance in meters of vehicle center from the line
@@ -36,7 +41,7 @@ class Line():
             self.radius_of_curvature = curvature
             return True
         else:
-            print(curvature, slope_compare)
+            self.flush()
             # self.grace_amount += 1
             return False
 
@@ -46,13 +51,15 @@ class Line():
                 self.radius_of_curvature = curvature
                 return True
             else:
+                # self.flush()
                 # self.grace_amount += 1
                 return False
         else:
             return True
 
-    def update(self, fit, indx, x, y):
+    def update(self, fit, fit_m, indx, x, y):
         self.current_fit = fit
+        self.current_fit_m = fit_m
         self.indx = indx
         self.allx = x
         self.ally = y
@@ -61,9 +68,12 @@ class Line():
     def track_fits(self):
         if len(self.recent_fitted) < 6:
             self.recent_fitted.append(self.current_fit)
+            self.recent_fitted_m.append(self.current_fit_m)
         else:
             self.recent_fitted.pop()
+            self.recent_fitted_m.pop()
             self.recent_fitted.append(self.current_fit)
+            self.recent_fitted_m.append(self.current_fit_m)
         self.avg_fits()
 
     def avg_fits(self):
@@ -71,3 +81,14 @@ class Line():
         for fit in self.recent_fitted:
             best += fit
         self.best_fit = best/float(len(self.recent_fitted))
+
+        best_m = [0, 0, 0]
+        for fit in self.recent_fitted_m:
+            best_m += fit
+        self.best_fit_m = best_m/float(len(self.recent_fitted_m))
+
+    def flush(self):
+        self.best_fit = []
+        self.best_fit_m = []
+        self.recent_fitted = []
+        self.recent_fitted_m = []
