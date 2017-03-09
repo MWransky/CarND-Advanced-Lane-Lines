@@ -19,19 +19,23 @@ Funtions for determining the distortion coefficients for the camera as well as t
 
 Here is an example image used to determine the calibration coefficients both before and after correction.
 
-Before:
+Before
+
 ![dist_checker](https://cloud.githubusercontent.com/assets/13735131/23767950/67a06518-04d8-11e7-88b1-933a3dee6b98.png)
 
-After:
+After
+
 ![undist_checker](https://cloud.githubusercontent.com/assets/13735131/23767954/67a365d8-04d8-11e7-9163-b24d4a3f7134.png)
 
 ### Distortion Correction
 Using the coefficients learned via the test calibration images, we take each image in the pipeline and undistort the image. See below for a distorted image and the resulting corrected image.
 
-Distorted:
+Distorted
+
 ![original](https://cloud.githubusercontent.com/assets/13735131/23767958/67b606fc-04d8-11e7-8160-8842eadc9cb4.png)
 
-Corrected:
+Corrected
+
 ![undistorted](https://cloud.githubusercontent.com/assets/13735131/23767957/67b14e14-04d8-11e7-8c88-378b2352e18a.png)
 
 ### Thresholding
@@ -69,6 +73,7 @@ We find two main measurements from our lane information:
   * We find the radius of curvature using the coefficients from the metric fit of the line and its resulting derivative. The result is calculated in the `find_curvature` and uses the maximum y-value (max image height) as the input for the curvature equation. We average the curvature based on both the left line and right line.
 * Car placement:
   * We also determine the placement of the car relative to the center of the found lanes. We assume that the image center is the center of the car and then we find the middle value between the left lane line and the right lane line at the maximum y-value (basically the location closest to the car). Finally, we find the difference between these two values and that represents the distance off-center from the lane. The `find_center` function in `lanes.py` is responsible for this logic.
+
 ### Final Output
 We combine all the lane, curvature, and car placement information and impose it directly on the image. We paint in the full lane as determined by the pixels in between the two lanes and we put text on the image for the curvature and distance from lane center. Code for this process is in the `draw_lanes_on_original` function within the `lanes.py` file.
 
