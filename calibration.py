@@ -48,3 +48,19 @@ def find_cal_matrix():
 
 def undistort_img(image, mtx, dist):
     return cv2.undistort(image, mtx, dist, None, mtx)
+
+
+def main():
+    mtx, dist = find_cal_matrix()
+    # use a sample image to pull transform matrix
+    image = cv2.imread('camera_cal/calibration1.jpg')
+    plt.figure(1)
+    plt.imshow(image)
+    undist = undistort_img(image, mtx, dist)
+    plt.figure(2)
+    plt.imshow(undist)
+    plt.show()
+
+
+if __name__ == "__main__":
+    main()
