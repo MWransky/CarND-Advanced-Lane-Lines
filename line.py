@@ -37,7 +37,7 @@ class Line():
         intersect_compare = np.sqrt((self.best_fit[2]-fit[2])**2)
         slope_compare = np.sqrt((self.best_fit[0]-fit[0])**2) + np.sqrt((self.best_fit[1]-fit[1])**2)
         # print(curve_compare, intersect_compare, slope_compare)
-        if curvature < 1500 or slope_compare < .35:
+        if curvature < 1500:
             self.radius_of_curvature = curvature
             return True
         else:

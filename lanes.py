@@ -234,7 +234,7 @@ def draw_lanes_on_original(warped, undist, leftLine, rightLine, Minv):
     curve = (leftLine.radius_of_curvature + rightLine.radius_of_curvature)/float(2)
     ymax = warped.shape[0]
     img_center = warped.shape[1]/float(2)
-    off_center = find_center(ymax, img_center, left_fit_m, right_fit_m)
+    off_center = find_center(ymax, img_center, left_fit, right_fit)
     text = 'Average curvature: {0} m; Off-center by {1} m'. format(round(curve), round(off_center, 2))
     font = cv2.FONT_HERSHEY_SIMPLEX
     result = cv2.putText(result, text, (100, 50), font, 1, (0, 0, 0), 2, cv2.LINE_AA)
@@ -248,8 +248,8 @@ def find_curvature(ymax, polyfit):
 
 def find_center(ymax, img_center, left_fit, right_fit):
     xm_per_pix = 3.7/700
-    ym_per_pix = 30/270
-    ymax *= ym_per_pix
+    # ym_per_pix = 30/270
+    # ymax *= ym_per_pix
     img_center *= xm_per_pix
     left_pt = left_fit[0]*ymax**2 + left_fit[1]*ymax + left_fit[2]
     right_pt = right_fit[0]*ymax**2 + right_fit[1]*ymax + right_fit[2]
@@ -296,7 +296,7 @@ def process_line(warped, line, side):
 def process_image_for_lanes(warped, undist, Minv, leftLine, rightLine):
     leftLine = process_line(warped, leftLine, 'left')
     rightLine = process_line(warped, rightLine, 'right')
-    # visualize_lanes(warped, left_fit, right_fit, l_indx, r_indx)
+    # visualize_lanes(warped, leftLine.best_fit, rightLine.best_fit, leftLine.indx, rightLine.indx)
 
     output = draw_lanes_on_original(warped, undist, leftLine, rightLine, Minv)
     return output, leftLine, rightLine
